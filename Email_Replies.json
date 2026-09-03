@@ -1,0 +1,773 @@
+{
+  "name": "Email_Replies",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Email",
+              "lookupValue": "={{ $json.from.value[0].address }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -240,
+        -80
+      ],
+      "id": "af80243b-a927-42b4-bb3d-83158cb46d73",
+      "name": "Get row(s) in sheet",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "format": "resolved",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]",
+          "trackLastMessageId": true
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        -432,
+        -80
+      ],
+      "id": "8e06ad07-3660-4da7-9004-e516fb68c156",
+      "name": "Email Trigger (IMAP)",
+      "executeOnce": true,
+      "credentials": {
+        "imap": {
+          "id": "sbBF4jtl4s1j2Bxx",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.1-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.1-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an AI intent classifier for an insurance brokerage. Analyze the client's email reply below and categorize their response. This email format is in HTML.\n\nClient Information:\n- Full Name: {{ $json.Full_Name }}\n- Policy Type: {{ $json.Policy_Type }}\n\nInbound Email Subject: {{ $('Email Trigger (IMAP)').item.json.headers.subject }}\nInbound Email Body in HTML Format: {{ $('Email Trigger (IMAP)').item.json.html }}\n\nCLASSIFICATION CATEGORIES:\n1. \"RENEWAL_CONFIRMED\" - Client explicitly agrees to renew their policy as-is.\n2. \"NEEDS_HUMAN_REVIEW\" - Client asks questions, requests coverage upgrades, wants changes, or requests a custom quote.\n3. \"CANCEL_OPT_OUT\" - Client explicitly asks to cancel, opt-out, or states they found another provider.\n\nOUTPUT RULES:\n- Output ONLY a valid JSON object. Do NOT wrap in markdown code blocks.\n- Output JSON format:\n{\n  \"intent\": \"RENEWAL_CONFIRMED\" | \"NEEDS_HUMAN_REVIEW\" | \"CANCEL_OPT_OUT\",\n  \"confidence\": number between 0.0 and 1.0,\n  \"summary\": \"1-sentence summary of what the client said\",\n  \"email\": {{ $json.Email }},\n  \"name\": {{ $json.Full_Name }}\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -32,
+        -80
+      ],
+      "id": "590c1c63-8b51-4fb8-8252-0e7973099060",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YKbngRurEov1uKz3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $input.first().json.content.parts[0].text;\nconst parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());\n\n// Pull raw email body\nconst rawEmail = $input.first().json.content.parts[0].text || \"\";\n\n// Clean raw thread quotes\nconst cleanReply = rawEmail\n  .split(/On\\s+.*wrote:/i)[0]           // Strips \"On [Date] [Sender] wrote:\" and everything after it\n  .replace(/^>.*$/gm, '')                // Removes lines starting with '>'\n  .replace(/[\\r\\n]{3,}/g, '\\n\\n')        // Reduces excessive blank lines\n  .trim();\n\nreturn {\n  json: {\n    ...$input.first().json,\n    intent: parsed.intent,\n    summary: parsed.summary,\n    email: parsed.email,\n    name: parsed.name,\n    clean_reply: cleanReply || \"No text provided (empty message)\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -80
+      ],
+      "id": "35624e49-4155-4ca8-8381-9ecb4dc88f41",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "RENEWAL_CONFIRMED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "07aae45e-2df5-443c-ae55-9b02442ba712"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "76d7edff-4a44-46cf-b48c-7cce3b797a9e",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "NEEDS_HUMAN_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f1d0bcfb-7a7f-46d2-a0a2-cbe05931056a",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "CANCEL_OPT_OUT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        -80
+      ],
+      "id": "fad0c7c4-9a90-4f28-aee1-19720e04cf5c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "fromEmail": "contact@paxonflow.dev",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Thank you so much for your confirmation",
+        "html": "=<div style=\"background-color: #f8fafc; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;\">\n  <div style=\"max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);\">\n    \n    <div style=\"background-color: #0f172a; padding: 24px 32px; text-align: left;\">\n      <h1 style=\"color: #ffffff; font-size: 16px; font-weight: 600; margin: 0; letter-spacing: 0.5px;\">POLICY RENEWAL Confirmation</h1>\n    </div>\n\n    <div style=\"padding: 32px; color: #334155; font-size: 15px; line-height: 1.6;\">\n      <p style=\"margin-top: 0; font-weight: 600; color: #0f172a;\">To: {{ $json.name }}</p>\n\n      <!-- Suggested Reply Block (professional, ready-to-send) -->\n      <div style=\"background-color: #f1f5f9; border-left: 4px solid #10b981; padding: 16px 20px; border-radius: 4px; margin: 20px 0;\">\n        <p style=\"margin: 0; font-size: 15px; color: #0f172a; font-weight: 500;\">\n          Dear {{ $json.name }},<br><br>\n          Thank you for contacting Prime Insurance regarding your insurance policy. We have received your message and understand that You want to renew it. Our team is reviewing the details and will follow up with any required next steps within 2 business days.<br><br>\n          If you can provide any supporting documents or additional information, please reply to this email or upload them through your policy portal so we can resolve this matter more quickly. For urgent concerns, you may call our support line at 1-800-123-4567.<br><br>\n          Thank you for your patience and for choosing Prime Insurance.<br><br>\n          Sincerely,<br>\n          Prime Insurance Support Team\n        </p>\n      </div>\n    </div>\n\n    <div style=\"background-color: #f8fafc; padding: 16px 32px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;\">\n      <p style=\"margin: 0; font-weight: 600; color: #64748b;\">Prime Insurance Services</p>\n    </div>\n\n  </div>\n</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        752,
+        -272
+      ],
+      "id": "04855653-2a9a-4268-82d5-617ad31768c4",
+      "name": "Send an Email",
+      "webhookId": "736b6535-5d3f-4829-84a5-51ee2fcc0ade",
+      "credentials": {
+        "smtp": {
+          "id": "BTNLpM2BMUeClcnf",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Renewal_Status": "Pending Renewal",
+            "Email": "={{ $('Send an Email').item.json.envelope.to }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Policy_ID",
+              "displayName": "Policy_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Full_Name",
+              "displayName": "Full_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Policy_Type",
+              "displayName": "Policy_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Policy_Status",
+              "displayName": "Policy_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Issue_Date",
+              "displayName": "Issue_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Expiration_Date",
+              "displayName": "Expiration_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Last_Contacted",
+              "displayName": "Last_Contacted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Followup_Count",
+              "displayName": "Followup_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Renewal_Status",
+              "displayName": "Renewal_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        -272
+      ],
+      "id": "3b82a582-0b4e-4408-bd15-7ff4589a7a16",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BSMK81ZCP",
+          "mode": "list",
+          "cachedResultName": "insurance-brockers"
+        },
+        "text": "=The client: {{ $json.name }} replied with: {{ $json.summary }}. We sent them an email to ask him to renew his insurance Policy. \n\nClient Email: {{ $json.email }}. \nClient Phone: {{ $json.name }}.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        832,
+        -64
+      ],
+      "id": "a3daa560-907c-4962-a602-9d9b4ab1b82f",
+      "name": "Send a message",
+      "webhookId": "aab3f1d5-8848-4493-811b-2e805bb74bf9",
+      "credentials": {
+        "slackApi": {
+          "id": "TX9udP4g9FqEcXOq",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BSMK81ZCP",
+          "mode": "list",
+          "cachedResultName": "insurance-brockers"
+        },
+        "text": "=  The client:  {{ $('Switch').item.json.name }} replied with: {{ $('Switch').item.json.summary }}. We sent them an automated confirmation email that we'll process his policy in 2 business days. You need to check  his documents manually and process his operation.\n\nClient Email: {{ $('Switch').item.json.email }}. \nClient Name: {{ $('Switch').item.json.name }}.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1152,
+        -272
+      ],
+      "id": "fffd7b76-4905-476e-8201-2baeb4e0f26f",
+      "name": "Send a message1",
+      "webhookId": "aab3f1d5-8848-4493-811b-2e805bb74bf9",
+      "credentials": {
+        "slackApi": {
+          "id": "TX9udP4g9FqEcXOq",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BSMK81ZCP",
+          "mode": "list",
+          "cachedResultName": "insurance-brockers"
+        },
+        "text": "=The client: {{ $json.name }} replied with: {{ $json.summary }}. We sent them an email to ask him to renew his insurance type: {{ $('Get row(s) in sheet').item.json.Policy_Type }}. The client wants to cancel the policy and no need to extend it anymore.\n\nClient Email: {{ $json.email }}.\nClient Name: {{ $json.name }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        192
+      ],
+      "id": "a66497d0-34a9-4113-838a-f79cd44d7ea1",
+      "name": "Send a message2",
+      "webhookId": "aab3f1d5-8848-4493-811b-2e805bb74bf9",
+      "credentials": {
+        "slackApi": {
+          "id": "TX9udP4g9FqEcXOq",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Renewal_Status": "Cancelled",
+            "Email": "={{ $('Switch').item.json.email }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Policy_ID",
+              "displayName": "Policy_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Full_Name",
+              "displayName": "Full_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Policy_Type",
+              "displayName": "Policy_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Policy_Status",
+              "displayName": "Policy_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Issue_Date",
+              "displayName": "Issue_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Expiration_Date",
+              "displayName": "Expiration_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Last_Contacted",
+              "displayName": "Last_Contacted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Followup_Count",
+              "displayName": "Followup_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Renewal_Status",
+              "displayName": "Renewal_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1088,
+        192
+      ],
+      "id": "7d98a59d-4541-4bd7-a5d8-4af42051c11e",
+      "name": "Update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "af05e2ef-be1a-44df-84f2-f4c88f3cc353",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8b53ed126c7fd646930ddb048d12306b77ab0d700a0098e2564ca05aaacf5a0f"
+  },
+  "nodeGroups": [],
+  "id": "7pBIDFpLFYFAVssU",
+  "tags": []
+}

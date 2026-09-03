@@ -1,0 +1,435 @@
+{
+  "name": "Insurance brockers send personalized email",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "eb014d58-52bc-4729-bda9-38a8b2443410",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "7d68ec60-6c58-4cd8-837b-14eebc43e26c",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mode: Run Once for All Items\nconst items = $input.all();\n\n// Set today to midnight for exact day calculation\nconst today = new Date();\ntoday.setHours(0, 0, 0, 0);\n\nreturn items.map(item => {\n  const row = item.json;\n\n  const expDateStr = row.Expiration_Date || row.expiration_date;\n  const lastContactedStr = row.Last_Contacted || row.last_contacted_date || row.Last_Contacted_Date;\n  const rawFollowup = row.Followup_Count !== undefined && row.Followup_Count !== \"\" && row.Followup_Count !== null \n    ? row.Followup_Count \n    : row.followup_count;\n\n  // Handle missing expiration dates\n  if (!expDateStr) {\n    return {\n      json: {\n        ...row,\n        days_to_expiration: null,\n        days_since_last_contact: null,\n        is_eligible: false\n      }\n    };\n  }\n\n  // Calculate days to expiration\n  const expDate = new Date(expDateStr);\n  expDate.setHours(0, 0, 0, 0);\n  const daysToExpiration = Math.round((expDate - today) / (1000 * 60 * 60 * 24));\n\n  // Robust parsing for Last_Contacted date\n  let daysSinceLastContact = 999;\n  if (lastContactedStr && String(lastContactedStr).trim() !== \"\") {\n    // Strip out broken non-standard prefixes like \"08-\" from \"08-Aug 27, 2026\"\n    const cleanDateStr = String(lastContactedStr).replace(/^[0-9]{2}-/, '').trim();\n    const parsedLastContacted = new Date(cleanDateStr);\n\n    // Only calculate if the resulting date string is valid and not in the future\n    if (!isNaN(parsedLastContacted.getTime())) {\n      parsedLastContacted.setHours(0, 0, 0, 0);\n      const diff = Math.round((today - parsedLastContacted) / (1000 * 60 * 60 * 24));\n      // If calculated diff is negative (corrupted future date), treat as uncontacted (999)\n      daysSinceLastContact = diff < 0 ? 999 : diff;\n    }\n  }\n\n  const followupCount = parseInt(rawFollowup || 0, 10);\n\n  // Check eligibility rule: <= 30 days left, >= 0 days, < 4 followups, 7+ days since last email\n  const isEligible = daysToExpiration <= 30 && daysToExpiration >= 0 && followupCount < 4 && daysSinceLastContact >= 7;\n\n  return {\n    json: {\n      ...row,\n      days_to_expiration: daysToExpiration,\n      days_since_last_contact: daysSinceLastContact,\n      is_eligible: isEligible,\n      new_followup_count: isEligible ? followupCount + 1 : followupCount\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "39ac3001-7842-49ec-a48c-fb7bd82ab4d8",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ff1ec7cf-4bb7-4f34-903e-f52a26762dc2",
+              "leftValue": "={{ $json.is_eligible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "22fd50cf-8be7-4102-a676-6134f54bf07d",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.1-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.1-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert insurance consultant writing a personalized renewal reminder to {{ $json.Full_Name }}.\n\nPolicy Details:\n\nClient Name: {{ $json.Full_Name }}\n\nPolicy Type: {{ $json.Policy_Type }}\n\nExpiration Date: {{ $json.Expiration_Date }}\n\nInstructions: > 1. Remind them politely that their policy expires in {{$json.days_to_expiration }} days.\n\nAsk if they want to renew as-is or explore upgraded coverage options.\n\nProvide this link to view plans and features: https://yourbrokerage.com/plans\n\nKeep the email concise (under 120 words), warm, and professional.\n\nOutput ONLY the email body text without conversational intro/outro wrappers.\n\nSTRICT OUTPUT RULES:\n1. Output ONLY pure raw HTML string.\n2. DO NOT use Markdown formatting (Do NOT wrap in ```html or ```).\n3. DO NOT include any signatures, footers, disclaimers, or mentions of automation/AI/n8n.\n4. Replace [DYNAMIC_EMAIL_BODY] in the HTML template below with a concise (under 100 words), professional, and personalized message reminding {{ $json.Full_Name }} that their {{ $json.Policy_Type }} policy expires in {{ $json.days_to_expiration }} days. Ask if they want to renew as-is or explore upgraded coverage.\n\nHTML TEMPLATE TO POPULATE:\n<div style=\"background-color: #f8fafc; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;\">\n  <div style=\"max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);\">\n    \n    <div style=\"background-color: #0f172a; padding: 24px 32px; text-align: left;\">\n      <h1 style=\"color: #ffffff; font-size: 16px; font-weight: 600; margin: 0; letter-spacing: 0.5px;\">POLICY RENEWAL NOTICE</h1>\n    </div>\n\n    <div style=\"padding: 32px; color: #334155; font-size: 15px; line-height: 1.6;\">\n      <p style=\"margin-top: 0; font-weight: 600; color: #0f172a;\">Dear {{ $json.Full_Name }},</p>\n\n      <div style=\"margin-bottom: 24px;\">\n        [DYNAMIC_EMAIL_BODY]\n      </div>\n\n      <div style=\"background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 16px 20px; border-radius: 4px; margin: 24px 0;\">\n        <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n          <tr>\n            <td style=\"padding: 6px 0; color: #64748b;\">Policy Type:</td>\n            <td style=\"padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;\">{{ $json.Policy_Type }}</td>\n          </tr>\n          <tr>\n            <td style=\"padding: 6px 0; color: #64748b;\">Expiration Date:</td>\n            <td style=\"padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;\">{{ $json.Expiration_Date }}</td>\n          </tr>\n          <tr>\n            <td style=\"padding: 6px 0; color: #64748b;\">Days Remaining:</td>\n            <td style=\"padding: 6px 0; color: #dc2626; font-weight: 600; text-align: right;\">{{ $json.days_to_expiration }} Days</td>\n          </tr>\n        </table>\n      </div>\n\n      <div style=\"text-align: center; margin: 32px 0 16px 0;\">\n        <a href=\"https://yourbrokerage.com/plans\" style=\"background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;\">Review & Renew Coverage</a>\n      </div>\n    </div>\n\n    <div style=\"background-color: #f8fafc; padding: 20px 32px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;\">\n      <p style=\"margin: 0 0 4px 0; font-weight: 600; color: #64748b;\">Prime Insurance Services</p>\n      <p style=\"margin: 0;\">Reply directly to this email to speak with your assigned advisor.</p>\n    </div>\n\n  </div>\n</div>"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "b0d50150-8c0c-4efb-ab15-3c2cdfc9d2c6",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YKbngRurEov1uKz3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merges Gemini AI output back with original client data from the Filter node\nconst body = $input.first().json.content.parts[0].text\n    .replace(/---[\\s\\S]*$/g, '') // Removes anything after '---'\n    .replace(/This email was sent automatically.*/gi, '') // Removes 'sent automatically' lines\n    .replace(/sent with n8n.*/gi, '') // Removes 'n8n' references\n    .trim();\n  return {\n    json: {\n      policy_id: $('Filter').first().json.Policy_ID,\n      full_name: $('Filter').first().json.Full_Name,\n      email: $('Filter').first().json.Email,\n      policy_type: $('Filter').first().json.Policy_Type,\n      email_subject: 'Action Required: Renewal Notice for ' + $('Filter').first().json.Policy_Type,\n      email_body: body,\n    }\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "24a8433a-13ed-4937-b2fa-04624787cfde",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Last_Contacted": "={{ $now.format('yyyy-MM-dd') }}",
+            "Followup_Count": "={{ $('Get row(s) in sheet').item.json.Followup_Count | 0  + 1}}",
+            "Policy_ID": "={{ $('Get row(s) in sheet').item.json.Policy_ID }}",
+            "Renewal_Status": "Sent"
+          },
+          "matchingColumns": [
+            "Policy_ID"
+          ],
+          "schema": [
+            {
+              "id": "Policy_ID",
+              "displayName": "Policy_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Full_Name",
+              "displayName": "Full_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Policy_Type",
+              "displayName": "Policy_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Policy_Status",
+              "displayName": "Policy_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Issue_Date",
+              "displayName": "Issue_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Expiration_Date",
+              "displayName": "Expiration_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last_Contacted",
+              "displayName": "Last_Contacted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Followup_Count",
+              "displayName": "Followup_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Renewal_Status",
+              "displayName": "Renewal_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1600,
+        0
+      ],
+      "id": "8498d21e-9749-499f-ac7a-34ffdd3c7d3b",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "contact@paxonflow.dev",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.email_subject }}",
+        "html": "={{ $json.email_body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "220f95ff-9d0f-416a-9e59-07f47ebb3eba",
+      "name": "Send an Email",
+      "webhookId": "736b6535-5d3f-4829-84a5-51ee2fcc0ade",
+      "credentials": {
+        "smtp": {
+          "id": "BTNLpM2BMUeClcnf",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        []
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6fc4c832-b438-434f-9c5a-f4cb167ffedf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8b53ed126c7fd646930ddb048d12306b77ab0d700a0098e2564ca05aaacf5a0f"
+  },
+  "nodeGroups": [],
+  "id": "d9z6G6sB3rXW7bKm",
+  "tags": []
+}

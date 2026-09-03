@@ -1,0 +1,466 @@
+{
+  "name": "Insurance Broker read files and store in sheets",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "321a8351-7a93-48ad-ab1e-fbd7e75265ae",
+      "name": "Done !",
+      "type": "n8n-nodes-base.noOp",
+      "position": [
+        960,
+        432
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {},
+      "id": "c703ffee-c2c4-4cae-8d3c-862680ded4d4",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        -208,
+        464
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ccd95b23-ca0d-4e0a-a2af-c0e4fc9aae4e",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0e722511-c1d4-485e-af52-6fff376b2d8d",
+      "name": "Get PDF Data Only",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        560,
+        464
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "*.pdf",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1hduyp0ro1bU6FNpsG-AcbWJ8wlK5xRcK",
+            "mode": "list",
+            "cachedResultName": "N8N automation",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1hduyp0ro1bU6FNpsG-AcbWJ8wlK5xRcK"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
+      },
+      "id": "971ba492-f4b6-4f01-8047-3be375df4af0",
+      "name": "Get PDF Files/File",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        -32,
+        464
+      ],
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "bIF2FvJPTktRgb0R",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "ef8057b8-5c73-4096-bc49-efd15cac3f47",
+      "name": "Download Retrieval Files/File",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        160,
+        464
+      ],
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "bIF2FvJPTktRgb0R",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "bbe92998-c329-4086-a8e4-10cad8f211da",
+      "name": "Extract Files/File's Data",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [
+        352,
+        464
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * This function removes all newline characters (\"\\n\") from a given string.\n * In the context of your n8n workflow, you can use this in a \"Code\" node\n * to clean up the PDF text content before passing it to the AI Agent.\n *\n * @param {string} text The input string that may contain newline characters.\n * @returns {string} The processed string with all newline characters removed.\n */\nfunction removeNewlines(text) {\n  if (typeof text !== 'string') {\n    // Return an empty string or handle the error as appropriate for your workflow\n    console.error(\"Input must be a string.\");\n    return \"\";\n  }\n  // The .replace() method with a regular expression /g ensures all occurrences are replaced.\n  return text.replace(/\\n/g, ' ');\n}\n\n// Example usage based on the text you provided:\n// In your n8n \"Code\" node, you would get the input from the previous node.\n// For example: const a_variable_from_another_node = \"your text here\";\nconst inputText = $input.first().json.text;\nconst cleanedText = removeNewlines(inputText);\nconsole.log(\"Original Text:\");\nconsole.log(inputText);\nconsole.log(\"\\\\n------------------\\\\n\");\nconsole.log(\"Cleaned Text:\");\nconsole.log(cleanedText);\n\n// To use this in n8n, you'd typically return the result like this:\nreturn { cleanedText: cleanedText };\n"
+      },
+      "id": "ea048d2c-67ec-4a68-aa2e-77899828b1c7",
+      "name": "Data Parser & Cleaner",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        752,
+        464
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"full_name\": { \"type\": \"string\" },\n    \"email\": { \"type\": \"string\" },\n    \"phone\": { \"type\": \"string\" },\n    \"policy_type\": { \"type\": \"string\" },\n    \"issue_date\": { \"type\": \"string\", \"description\": \"Format YYYY-MM-DD\" },\n    \"expiration_date\": { \"type\": \"string\", \"description\": \"Format YYYY-MM-DD\" }\n  },\n  \"required\": [\"full_name\", \"email\", \"phone\", \"expiration_date\"]\n}\n\n\"Extract client details and policy dates strictly from the provided policy text: \" {{ $json.cleanedText }} using the provided shema above in the first of the prompt"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1168,
+        432
+      ],
+      "id": "6870adff-045e-47ba-aaf4-c9d2718e9a36",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YKbngRurEov1uKz3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get raw text and parse JSON from AI output\nconst rawText = $input.first().json.content.parts[0].text;\nconst cleanText = rawText.replace(/```json|```/gi, '').trim();\nconst parsed = JSON.parse(cleanText);\n\n// 2. Generate Unique Policy ID (e.g., POL-9F83A2)\nconst randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();\nconst uniquePolicyId = `POL-${randomCode}`;\n\n// 3. Sanitize phone number (keeps leading '+' for country codes, strips spaces/symbols, prepends ' for Sheets)\nconst rawPhone = parsed.phone || \"\";\nconst cleanPhone = rawPhone.startsWith('+') \n  ? '+' + rawPhone.replace(/[^\\d]/g, '') \n  : rawPhone.replace(/[^\\d]/g, '');\nconst formattedPhone = cleanPhone ? `'${cleanPhone}` : \"\";\n\n// 4. Return combined flattened object ready for Google Sheets\nreturn [\n  {\n    json: {\n      policy_id: uniquePolicyId,\n      full_name: parsed.full_name || \"\",\n      email: parsed.email || \"\",\n      phone: formattedPhone,\n      policy_type: parsed.policy_type || \"\",\n      policy_status: parsed.policy_status || \"ACTIVE\",\n      issue_date: parsed.issue_date || \"\",\n      expiration_date: parsed.expiration_date || \"\",\n      followup_count: 0,\n      renewal_status: \"Active\",\n      last_contacted_date: \"\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        432
+      ],
+      "id": "739b2512-b534-4f0a-bcff-b7b8861d910a",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U",
+          "mode": "list",
+          "cachedResultName": "Client_Policies_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/150iWSa--PulVgVcQZO__L27do_vTnlA2cShzFxzuP2U/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{ $json.email }}",
+            "Full_Name": "={{ $json.full_name }}",
+            "Phone": "={{ $json.phone }}",
+            "Issue_Date": "={{ $json.issue_date }}",
+            "Expiration_Date": "={{ $json.expiration_date }}",
+            "Policy_Type": "={{ $json.policy_type }}",
+            "Policy_ID": "={{ $json.policy_id }}",
+            "Followup_Count": "0"
+          },
+          "matchingColumns": [
+            "Policy_ID"
+          ],
+          "schema": [
+            {
+              "id": "Policy_ID",
+              "displayName": "Policy_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Full_Name",
+              "displayName": "Full_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Policy_Type",
+              "displayName": "Policy_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Policy_Status",
+              "displayName": "Policy_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Issue_Date",
+              "displayName": "Issue_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Expiration_Date",
+              "displayName": "Expiration_Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last_Contacted",
+              "displayName": "Last_Contacted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Followup_Count",
+              "displayName": "Followup_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Renewal_Status",
+              "displayName": "Renewal_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1696,
+        432
+      ],
+      "id": "ac900f38-6625-40cb-aed6-a5ecdd294fbd",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8M8v2oSKTffSjiyZ",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get PDF Files/File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PDF Data Only": {
+      "main": [
+        [
+          {
+            "node": "Data Parser & Cleaner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PDF Files/File": {
+      "main": [
+        [
+          {
+            "node": "Download Retrieval Files/File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Retrieval Files/File": {
+      "main": [
+        [
+          {
+            "node": "Extract Files/File's Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Files/File's Data": {
+      "main": [
+        [
+          {
+            "node": "Get PDF Data Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Parser & Cleaner": {
+      "main": [
+        [
+          {
+            "node": "Done !",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done !": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "dcf5c510-e845-4397-9adf-a47c6f2c28a8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8b53ed126c7fd646930ddb048d12306b77ab0d700a0098e2564ca05aaacf5a0f"
+  },
+  "nodeGroups": [],
+  "id": "nukQf9JwjCuuDo1K",
+  "tags": []
+}
